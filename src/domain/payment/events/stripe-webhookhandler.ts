@@ -12,17 +12,15 @@ export const handleStripeWebhook = async (rawBody: ArrayBuffer, sig: string) => 
   }
 
   const session = event.data.object;
-  console.log("FOO", session.metadata)
-  const deviceId = session.metadata?.deviceId;
   const fcmToken = session.metadata?.fcmToken;
 
   if (event.type === 'checkout.session.completed') {
-    if (deviceId && fcmToken) {
+    if (fcmToken) {
       console.log("FOO", "pago success")
       await notifyDevice(fcmToken, 'Payment Confirmed', 'You can now deliver the photos.', 'paid', session.id);
     }
   } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
-    if (deviceId && fcmToken) {
+    if (fcmToken) {
       console.log("FOO", "fallo")
       await notifyDevice(fcmToken, 'Payment Failed', 'Payment failed or expired.', 'failed', session.id);
     }

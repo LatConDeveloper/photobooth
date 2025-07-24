@@ -5,7 +5,7 @@ export const checkoutRoutes = new Hono();
 
 checkoutRoutes.post('/create-checkout-session', async (c) => {
   const body = await c.req.json();
-  const { deviceId, expoPushToken, line_items } = body;
+  const { expoPushToken, line_items } = body;
   const session = await createCheckoutSession({
     mode: 'payment',
     success_url: 'https://example.com/success.html',
@@ -13,7 +13,6 @@ checkoutRoutes.post('/create-checkout-session', async (c) => {
     currency: 'usd',
     line_items,
     metadata: {
-      deviceId,
       fcmToken: expoPushToken
     }
   });
