@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createCheckoutSession } from '../../domain/payment/services/stripe-services.js';
+import { createCheckoutSession, createPaymentIntent } from '../../domain/payment/services/stripe-services.js';
 
 export const checkoutRoutes = new Hono();
 
@@ -17,4 +17,18 @@ checkoutRoutes.post('/create-checkout-session', async (c) => {
     }
   });
   return c.json({ url: session.url });
+});
+
+checkoutRoutes.post('/create-payment-intent', async (c) => {
+  const body = await c.req.json();
+  const { expoPushToken, amount } = body;
+
+  const paymentIntent = await createPaymentIntent({
+    amount,
+    metadata: {
+      fcmToken: expoPushToken
+    }
+  });
+
+  return c.json({ client_secret: paymentIntent.client_secret });
 });
