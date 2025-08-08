@@ -1,5 +1,6 @@
 import { stripe } from "../../../config/stripe.js";
 import { notifyDevice } from "../../device/service.js";
+import { sendDeliveryLinks } from "../../media/services/send-service.js";
 
 export const handleStripeWebhook = async (rawBody: ArrayBuffer, sig: string) => {
   const textBody = Buffer.from(rawBody).toString();
@@ -16,12 +17,13 @@ export const handleStripeWebhook = async (rawBody: ArrayBuffer, sig: string) => 
 
   if (event.type === 'checkout.session.completed') {
     if (fcmToken) {
-      console.log("FOO", "pago success")
       await notifyDevice(fcmToken, 'Payment Confirmed', 'You can now deliver the photos.', 'paid', session.id);
     }
+    // callback for send link via sms or email
+    await sendDeliveryLinks(fcmToken)
+
   } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
     if (fcmToken) {
-      console.log("FOO", "fallo")
       await notifyDevice(fcmToken, 'Payment Failed', 'Payment failed or expired.', 'failed', session.id);
     }
   }

@@ -31,14 +31,25 @@ export class ImageRepository {
     return (data || []).map(r => r.storage_path);
   }
 
-  async createLink(deviceToken: string, expiresAt?: string) {
+  async createLink(deviceToken: string, method: string, destination: string, expiresAt?: string) {
     const { data, error } = await this.supabase
       .from('photo_links')
-      .insert({ device_token: deviceToken, expires_at: expiresAt || null })
+      .insert({ device_token: deviceToken, expires_at: expiresAt || null, method, destination })
       .select('*')
       .single();
     if (error) throw error;
     return data;
+  }
+
+  async getPhotoLinkByDeviceToken(deviceToken: string) {
+
+    const { data, error } = await this.supabase
+      .from('photo_links')
+      .select('*')
+      .eq('device_token', deviceToken)
+      .order('created_at', { ascending: true })
+    if (error) throw error;
+    return data[0];
   }
 
   async insertWithLink(linkId: string, storagePath: string){

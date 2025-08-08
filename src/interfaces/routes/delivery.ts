@@ -3,7 +3,6 @@ import {
   uploadImagesAndRegister,
   getSignedDownloadUrls,
   createZipBundleSignedUrl,
-  sendDeliveryLinks,
 } from '../../domain/media/services/image-upload-service.js';
 
 export const deliveryRoutes = new Hono();
@@ -12,7 +11,7 @@ export const deliveryRoutes = new Hono();
 // Body: { deviceToken: string, images: [...], mode?: 'links'|'zip', expiresIn?: number, delivery?: { email?: { to: string }, sms?: { to: string } } }
 // Returns: { linkId, urls? | zipUrl?, delivered_via? }
 
-deliveryRoutes.post('/images', async (c) => {
+/*deliveryRoutes.post('/images', async (c) => {
   const contentType = c.req.header('content-type') || '';
 
   let deviceToken: string;
@@ -70,7 +69,7 @@ deliveryRoutes.post('/images', async (c) => {
   }
 
   return c.json(response);
-});
+});*/
 
 // GET /images/:linkId?mode=links|zip&expiresIn=3600
 // Returns signed URLs or a signed ZIP url for a given linkId
