@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { createCheckoutSession, createPaymentIntent } from '../../domain/payment/services/stripe-services.js';
+import { createZipBundleSignedUrl } from '../../domain/media/services/image-upload-service.js';
 
 export const checkoutRoutes = new Hono();
 

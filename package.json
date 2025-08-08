@@ -10,7 +10,12 @@
     "@hono/node-server": "^1.16.0",
     "dotenv": "^17.2.0",
     "hono": "^4.8.5",
-    "stripe": "^18.3.0"
+    "stripe": "^18.3.0",
+    "twilio": "^5.8.0",
+    "@supabase/supabase-js": "^2.39.3",
+    "@sendgrid/mail": "^8.1.0",
+    "@aws-sdk/client-sesv2": "^3.633.0",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.17",
