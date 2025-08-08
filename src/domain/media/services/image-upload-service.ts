@@ -51,7 +51,6 @@ export async function getPhotoLinkChannel(
 ) {
   const repo = new ImageRepository(supabase);
   const photo_link = await repo.getPhotoLinkByDeviceToken(token)
-
   return photo_link
 }
 

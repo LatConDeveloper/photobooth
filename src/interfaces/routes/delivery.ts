@@ -15,7 +15,6 @@ deliveryRoutes.get('/download/:linkId', async (c) => {
     const linkId = c.req.param('linkId');
     if (!linkId) return c.text('linkId required', 400);
 
-    console.log("ogo", linkId)
     const repo = new ImageRepository(supabase);
     const paths = await repo.getPathsByLinkId(linkId);
     if (!paths.length) return c.text('No images for link', 404);
