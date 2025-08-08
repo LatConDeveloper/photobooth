@@ -1,91 +1,40 @@
 import { Hono } from 'hono';
-import { 
-  uploadImagesAndRegister,
-  getSignedDownloadUrls,
-  createZipBundleSignedUrl,
-} from '../../domain/media/services/image-upload-service.js';
+import JSZip from 'jszip';
+import { createClient } from '@supabase/supabase-js';
+import { ImageRepository } from '../../domain/media/repositories/image-repository.js';
 
 export const deliveryRoutes = new Hono();
 
-// POST /images
-// Body: { deviceToken: string, images: [...], mode?: 'links'|'zip', expiresIn?: number, delivery?: { email?: { to: string }, sms?: { to: string } } }
-// Returns: { linkId, urls? | zipUrl?, delivered_via? }
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_KEY!;
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'photos';
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-/*deliveryRoutes.post('/images', async (c) => {
-  const contentType = c.req.header('content-type') || '';
+deliveryRoutes.get('/download/:linkId', async (c) => {
+  try {
+    const linkId = c.req.param('linkId');
+    if (!linkId) return c.text('linkId required', 400);
 
-  let deviceToken: string;
-  let images: Array<{ filename?: string; mimeType?: string; base64?: string }> = [];
-  let mode: 'links' | 'zip' = 'links';
-  let expiresIn = 3600;
-  let delivery: any;
+    console.log("ogo", linkId)
+    const repo = new ImageRepository(supabase);
+    const paths = await repo.getPathsByLinkId(linkId);
+    if (!paths.length) return c.text('No images for link', 404);
 
-  if (contentType.includes('multipart/form-data')) {
-    const form = await c.req.parseBody();
-    deviceToken = form.deviceToken as string;
-    mode = (form.mode as 'links' | 'zip') || 'links';
-    expiresIn = form.expiresIn ? Number(form.expiresIn) : 3600;
-    if (form.delivery) {
-      try { delivery = JSON.parse(form.delivery as string); } catch { delivery = undefined; }
+    const zip = new JSZip();
+    for (const p of paths) {
+      const { data, error } = await supabase.storage.from(SUPABASE_BUCKET).download(p);
+      if (error) throw error;
+      const buf = Buffer.from(await data.arrayBuffer());
+      const name = p.split('/').slice(-1)[0];
+      zip.file(name, buf);
     }
 
-    const rawFiles = (form['images[]'] ?? form.images) as any;
-    const files = Array.isArray(rawFiles) ? rawFiles : rawFiles ? [rawFiles] : [];
-    images = await Promise.all(files.map(async (file: any) => {
-      const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
-      return { filename: file.filename, mimeType: file.type, base64 };
-    }));
-  } else {
-    const body = await c.req.json();
-    deviceToken = body.deviceToken;
-    images = body.images || [];
-    mode = body.mode || 'links';
-    expiresIn = body.expiresIn || 3600;
-    delivery = body.delivery;
+    const zipBuf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    c.header('Content-Type', 'application/zip');
+    c.header('Content-Disposition', `attachment; filename="photos_${linkId}.zip"`);
+    return new Response(zipBuf);
+  } catch (err: any) {
+    console.error('GET /download/:linkId failed', err);
+    return c.json({ error: 'Failed to build ZIP', detail: String(err?.message || err) }, 500);
   }
-
-  if (!deviceToken || images.length === 0) {
-    return c.json({ error: 'deviceToken and images are required' }, 400);
-  }
-
-  const { linkId, uploaded, errors } = await uploadImagesAndRegister(deviceToken, images);
-
-  let response: any = { linkId, uploaded, errors };
-
-  if (mode === 'zip') {
-    const zipUrl = await createZipBundleSignedUrl(linkId, expiresIn);
-    response.zipUrl = zipUrl;
-    if (delivery) {
-      const sent = await sendDeliveryLinks(delivery, linkId); // send zip link via email/SMS using same helper
-      response.delivered_via = sent.delivered_via;
-    }
-  } else {
-    const urls = await getSignedDownloadUrls(linkId, expiresIn);
-    response.urls = urls;
-    if (delivery) {
-      const sent = await sendDeliveryLinks(delivery, linkId);
-      response.delivered_via = sent.delivered_via;
-    }
-  }
-
-  return c.json(response);
-});*/
-
-// GET /images/:linkId?mode=links|zip&expiresIn=3600
-// Returns signed URLs or a signed ZIP url for a given linkId
-
-deliveryRoutes.get('/images/:linkId', async (c) => {
-  const linkId = c.req.param('linkId');
-  const mode = (c.req.query('mode') || 'links') as 'links'|'zip';
-  const expiresIn = Number(c.req.query('expiresIn') || 3600);
-
-  if (!linkId) return c.json({ error: 'linkId is required' }, 400);
-
-  if (mode === 'zip') {
-    const zipUrl = await createZipBundleSignedUrl(linkId, expiresIn);
-    return c.json({ linkId, zipUrl, expiresIn });
-  }
-
-  const urls = await getSignedDownloadUrls(linkId, expiresIn);
-  return c.json({ linkId, urls, expiresIn });
 });

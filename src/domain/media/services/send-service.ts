@@ -33,7 +33,7 @@ export async function sendDeliveryLinks(linkIdOrDeviceToken: string){
   const uuid = photo_link.id
 
   const baseUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
-  const downloadUrl = `${baseUrl}/download/${uuid}`;
+  const downloadUrl = `${baseUrl}/delivery/download/${uuid}`;
 
   const tasks: Promise<any>[] = [];
 

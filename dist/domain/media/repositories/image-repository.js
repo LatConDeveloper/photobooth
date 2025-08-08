@@ -57,7 +57,7 @@ export class ImageRepository {
         const { data, error } = await this.supabase
             .from('photos')
             .select('storage_path')
-            .eq('link_id', linkId)
+            .eq('id', linkId)
             .order('created_at', { ascending: true });
         if (error)
             throw error;
