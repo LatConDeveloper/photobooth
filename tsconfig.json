@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ESNext",
     "module": "NodeNext",
-    "strict": true,
-    "verbatimModuleSyntax": true,
+    "strict": false,
+    "verbatimModuleSyntax": false,
     "skipLibCheck": true,
     "types": [
       "node"
