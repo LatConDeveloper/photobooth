@@ -21,10 +21,21 @@ async function bufferFromInput(item) {
     throw new Error('Invalid image item: provide base64 or url');
 }
 function makeObjectKey(deviceToken, filename, mime) {
+    // Extract content inside square brackets, e.g., ExponentPushToken[ayMvP0Dd-yvZtM6jpe70EP]
+    let folder;
+    const match = deviceToken.match(/\[(.*?)\]/);
+    if (match && match[1]) {
+        folder = match[1];
+    }
+    else {
+        // fallback: sanitize deviceToken for folder name
+        folder = deviceToken.replace(/[^a-zA-Z0-9-_]/g, '_');
+    }
     const ext = filename?.split('.').pop() || (mime?.includes('png') ? 'png' : mime?.includes('webp') ? 'webp' : 'jpg');
     const safeName = filename?.replace(/[^a-zA-Z0-9-_\.]/g, '_');
     const ts = Date.now();
-    return `${deviceToken}/${ts}_${Math.random().toString(36).slice(2)}.${ext}`.replace('..', '.');
+    // Construct the object key with folder, timestamp, random string, and extension
+    return `${folder}/${ts}_${Math.random().toString(36).slice(2)}.${ext}`.replace('..', '.');
 }
 export async function getPhotoLinkChannel(token) {
     const repo = new ImageRepository(supabase);
@@ -43,17 +54,42 @@ export async function uploadImagesAndRegister(deviceToken, method, destination, 
     for (const img of images) {
         try {
             const { buffer, mime } = await bufferFromInput(img);
+            if (!buffer || buffer.length === 0) {
+                throw new Error('Empty image buffer');
+            }
             const objectKey = makeObjectKey(deviceToken, img.filename, mime);
             const { data: upRes, error: upErr } = await supabase.storage
                 .from(SUPABASE_BUCKET)
-                .upload(objectKey, buffer, { contentType: mime, upsert: false });
-            if (upErr)
-                throw upErr;
+                .upload(objectKey, buffer, { contentType: mime || 'application/octet-stream', upsert: false });
+            if (upErr) {
+                // Try to unwrap the underlying Response to expose real status/body
+                const resp = upErr.originalError;
+                let bodyText = '';
+                try {
+                    bodyText = resp ? await resp.text() : '';
+                }
+                catch { }
+                console.error('Supabase Storage upload failed', {
+                    objectKey,
+                    mime,
+                    size: buffer.length,
+                    status: resp?.status,
+                    statusText: resp?.statusText,
+                    message: upErr.message,
+                    body: bodyText,
+                });
+                const code = resp?.status;
+                const detailed = code
+                    ? `Upload failed (status ${code} ${resp?.statusText || ''}): ${upErr.message} ${bodyText}`.trim()
+                    : `Upload failed: ${upErr.message} ${bodyText}`.trim();
+                throw new Error(detailed);
+            }
             const record = await repo.insertWithLink(link.id, upRes.path);
             uploaded.push(record);
         }
         catch (e) {
-            errors.push(e.message || String(e));
+            console.error('uploadImagesAndRegister: image processing error', e);
+            errors.push(e?.message || String(e));
         }
     }
     return { linkId: link.id, uploaded, errors };
