@@ -47,7 +47,7 @@ export class ImageRepository {
       .from('photo_links')
       .select('*')
       .eq('device_token', deviceToken)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
     if (error) throw error;
     return data[0];
   }
