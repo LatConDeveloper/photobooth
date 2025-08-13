@@ -13,10 +13,28 @@ export const createCheckoutSession = async ({ line_items, success_url, cancel_ur
   return session;
 };
 
-export const createPaymentIntent = async ({ amount, metadata }: { amount: number, metadata: Record<string, any> }) => {
+export const createConnectionToken = async () => {
+  const token = await stripe.terminal.connectionTokens.create();
+  return token;
+};
+
+export const createPaymentIntent = async (
+  {
+    amount,
+    metadata,
+    currency = 'usd',
+    capture_method = 'automatic'
+  }: {
+    amount: number,
+    metadata: Record<string, any>,
+    currency?: string,
+    capture_method?: 'automatic' | 'manual'
+  }
+) => {
   const paymentIntent = await stripe.paymentIntents.create({
     amount,
-    currency: 'usd',
+    currency,
+    capture_method,
     payment_method_types: ['card_present'],
     metadata
   });

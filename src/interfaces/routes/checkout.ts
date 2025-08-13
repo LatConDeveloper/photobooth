@@ -1,8 +1,18 @@
 import { Hono } from 'hono';
-import { createCheckoutSession, createPaymentIntent } from '../../domain/payment/services/stripe-services.js';
+import { createCheckoutSession, createPaymentIntent, createConnectionToken } from '../../domain/payment/services/stripe-services.js';
 import { createZipBundleSignedUrl, uploadImagesAndRegister } from '../../domain/media/services/image-upload-service.js';
 
 export const checkoutRoutes = new Hono();
+
+checkoutRoutes.post('/connection-token', async (c) => {
+  try {
+    const token = await createConnectionToken();
+    return c.json({ secret: token.secret });
+  } catch (err: any) {
+    console.error('connection-token failed:', err);
+    return c.json({ error: 'Failed to create connection token', detail: String(err?.message || err) }, 500);
+  }
+});
 
 checkoutRoutes.post('/create-checkout-session', async (c) => {
   try {
@@ -78,15 +88,27 @@ checkoutRoutes.post('/create-checkout-session', async (c) => {
 });
 
 checkoutRoutes.post('/create-payment-intent', async (c) => {
-  const body = await c.req.json();
-  const { expoPushToken, amount } = body;
+  try {
+    const body = await c.req.json();
+    const { expoPushToken, amount, currency = 'usd', capture_method } = body || {};
 
-  const paymentIntent = await createPaymentIntent({
-    amount,
-    metadata: {
-      fcmToken: expoPushToken
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return c.json({ error: 'amount must be a positive number (in the smallest currency unit)' }, 400);
     }
-  });
 
-  return c.json({ client_secret: paymentIntent.client_secret });
+    const paymentIntent = await createPaymentIntent({
+      amount: parsedAmount,
+      currency,
+      capture_method,
+      metadata: {
+        fcmToken: expoPushToken
+      }
+    });
+
+    return c.json({ client_secret: paymentIntent.client_secret, id: paymentIntent.id, currency: paymentIntent.currency });
+  } catch (err: any) {
+    console.error('create-payment-intent failed:', err);
+    return c.json({ error: 'Failed to create payment intent', detail: String(err?.message || err) }, 500);
+  }
 });
