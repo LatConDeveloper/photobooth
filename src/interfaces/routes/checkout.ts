@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createCheckoutSession, createPaymentIntent, createConnectionToken } from '../../domain/payment/services/stripe-services.js';
 import { createZipBundleSignedUrl, uploadImagesAndRegister } from '../../domain/media/services/image-upload-service.js';
+import { getSquareAuthorization } from '../../domain/payment/services/square-services.js';
 
 export const checkoutRoutes = new Hono();
 
@@ -11,6 +12,16 @@ checkoutRoutes.post('/connection-token', async (c) => {
   } catch (err: any) {
     console.error('connection-token failed:', err);
     return c.json({ error: 'Failed to create connection token', detail: String(err?.message || err) }, 500);
+  }
+});
+
+checkoutRoutes.post('/square/mobile-auth-code', async (c) => {
+  try {
+    const { accessToken, locationId } = await getSquareAuthorization();
+    return c.json({ accessToken, locationId });
+  } catch (err: any) {
+    console.error('square/mobile-auth-code failed:', err);
+    return c.json({ error: 'Failed to create Square mobile authorization code', detail: String(err?.message || err) }, 500);
   }
 });
 

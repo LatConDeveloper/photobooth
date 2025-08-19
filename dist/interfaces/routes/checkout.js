@@ -1,7 +1,28 @@
 import { Hono } from 'hono';
-import { createCheckoutSession, createPaymentIntent } from '../../domain/payment/services/stripe-services.js';
+import { createCheckoutSession, createPaymentIntent, createConnectionToken } from '../../domain/payment/services/stripe-services.js';
 import { uploadImagesAndRegister } from '../../domain/media/services/image-upload-service.js';
+import { getSquareAuthorization } from '../../domain/payment/services/square-services.js';
 export const checkoutRoutes = new Hono();
+checkoutRoutes.post('/connection-token', async (c) => {
+    try {
+        const token = await createConnectionToken();
+        return c.json({ secret: token.secret });
+    }
+    catch (err) {
+        console.error('connection-token failed:', err);
+        return c.json({ error: 'Failed to create connection token', detail: String(err?.message || err) }, 500);
+    }
+});
+checkoutRoutes.post('/square/mobile-auth-code', async (c) => {
+    try {
+        const { accessToken, locationId } = await getSquareAuthorization();
+        return c.json({ accessToken, locationId });
+    }
+    catch (err) {
+        console.error('square/mobile-auth-code failed:', err);
+        return c.json({ error: 'Failed to create Square mobile authorization code', detail: String(err?.message || err) }, 500);
+    }
+});
 checkoutRoutes.post('/create-checkout-session', async (c) => {
     try {
         let deviceToken;
@@ -72,13 +93,25 @@ checkoutRoutes.post('/create-checkout-session', async (c) => {
     }
 });
 checkoutRoutes.post('/create-payment-intent', async (c) => {
-    const body = await c.req.json();
-    const { expoPushToken, amount } = body;
-    const paymentIntent = await createPaymentIntent({
-        amount,
-        metadata: {
-            fcmToken: expoPushToken
+    try {
+        const body = await c.req.json();
+        const { expoPushToken, amount, currency = 'usd', capture_method } = body || {};
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            return c.json({ error: 'amount must be a positive number (in the smallest currency unit)' }, 400);
         }
-    });
-    return c.json({ client_secret: paymentIntent.client_secret });
+        const paymentIntent = await createPaymentIntent({
+            amount: parsedAmount,
+            currency,
+            capture_method,
+            metadata: {
+                fcmToken: expoPushToken
+            }
+        });
+        return c.json({ client_secret: paymentIntent.client_secret, id: paymentIntent.id, currency: paymentIntent.currency });
+    }
+    catch (err) {
+        console.error('create-payment-intent failed:', err);
+        return c.json({ error: 'Failed to create payment intent', detail: String(err?.message || err) }, 500);
+    }
 });

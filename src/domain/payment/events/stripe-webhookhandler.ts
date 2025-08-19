@@ -2,6 +2,7 @@ import { stripe } from "../../../config/stripe.js";
 import { notifyDevice } from "../../device/service.js";
 import { sendDeliveryLinks } from "../../media/services/send-service.js";
 
+// Stripe webhook handler
 export const handleStripeWebhook = async (rawBody: ArrayBuffer, sig: string) => {
   const textBody = Buffer.from(rawBody).toString();
   let event;
