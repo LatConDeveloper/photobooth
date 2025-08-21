@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { handleStripeWebhook } from '../../domain/payment/events/stripe-webhookhandler.js';
 import { WebhooksHelper } from 'square';
+import { notifyDevice } from '../../domain/device/service.js';
 export const webhookRoutes = new Hono();
-webhookRoutes.post('/', async (c) => {
+webhookRoutes.post('/stripe', async (c) => {
     const rawBody = await c.req.arrayBuffer();
     const sig = c.req.header('stripe-signature') || '';
     const status = await handleStripeWebhook(rawBody, sig);
@@ -28,11 +29,17 @@ webhookRoutes.post('/square', async (c) => {
     try {
         const payload = JSON.parse(rawBody);
         console.log(`Square webhook: ${payload.type} - ${payload.event_id}`);
-        if (payload.type === 'payment.created' || payload.type === 'payment.updated') {
+        if (payload.type === 'payment.created') {
             const payment = payload.data.object.payment;
             // Example: log core fields; you can persist to DB or notify device here
-            console.log('payment.id:', payment.id, 'status:', payment.status, 'amount:', payment.amount_money?.amount);
-            // TODO: correlate with your order/device via idempotencyKey, reference_id, or note fields
+            if (payment.note && payment.note.startsWith('ExponentPushToken')) {
+                try {
+                    await notifyDevice(payment.note, 'Payment Confirmed', 'You can now deliver the photos.', 'paid', payment.id);
+                }
+                catch (error) {
+                    console.error('Error sending push notification', error);
+                }
+            }
             // notifyDevice(...).catch(console.error);
         }
         else {
