@@ -27,26 +27,41 @@ export type DeliveryChannel = {
 };
 
 export async function sendDeliveryLinks(linkIdOrDeviceToken: string){
+  const photo_link = await getPhotoLinkChannel(linkIdOrDeviceToken);
 
-  const photo_link = await getPhotoLinkChannel(linkIdOrDeviceToken)
-  
-  const uuid = photo_link.id
-
+  const uuid = photo_link.id;
   const baseUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
   const downloadUrl = `${baseUrl}/delivery/download/${uuid}`;
 
-  const tasks: Promise<any>[] = [];
+  const method = (photo_link.method || '').toLowerCase();
+  const destination = photo_link.destination as string | undefined;
 
-  if (photo_link.method === 'email'){
-    tasks.push(sendEmailWithLinks(photo_link.destination, [downloadUrl]));
-  } else {
-    const twilio = (await import('twilio')).default(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    const body = buildSmsBody([downloadUrl]);
-    tasks.push(twilio.messages.create({ from: TWILIO_FROM, to: photo_link.destination, body }));
+  // Handle delivery methods explicitly
+  if (method === 'print') {
+    // No outbound message; just acknowledge and return the URL for logging/debug
+    return { delivered_via: 'print', urls: [downloadUrl], skipped: true };
   }
 
-  await Promise.all(tasks);
-  return { delivered_via: photo_link.method, urls: [downloadUrl] };
+  if (method === 'email') {
+    if (!destination) {
+      return { delivered_via: 'email', urls: [downloadUrl], skipped: true, reason: 'missing_destination' };
+    }
+    await sendEmailWithLinks(destination, [downloadUrl]);
+    return { delivered_via: 'email', urls: [downloadUrl] };
+  }
+
+  if (method === 'sms') {
+    if (!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM) || !destination) {
+      return { delivered_via: 'sms', urls: [downloadUrl], skipped: true, reason: 'twilio_not_configured_or_missing_destination' };
+    }
+    const twilio = (await import('twilio')).default(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+    const body = buildSmsBody([downloadUrl]);
+    await twilio.messages.create({ from: TWILIO_FROM, to: destination, body });
+    return { delivered_via: 'sms', urls: [downloadUrl] };
+  }
+
+  // Unknown or unsupported method → no-op, but return URL for logging
+  return { delivered_via: method || null, urls: [downloadUrl], skipped: true, reason: 'unsupported_method' };
 }
 
 async function sendEmailWithLinks(to: string, urls: string[]){

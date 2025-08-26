@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { handleStripeWebhook } from '../../domain/payment/events/stripe-webhookhandler.js';
 import { WebhooksHelper } from 'square';
 import { notifyDevice } from '../../domain/device/service.js';
+import { sendDeliveryLinks } from '../../domain/media/services/send-service.js';
 export const webhookRoutes = new Hono();
 webhookRoutes.post('/stripe', async (c) => {
     const rawBody = await c.req.arrayBuffer();
@@ -35,6 +36,8 @@ webhookRoutes.post('/square', async (c) => {
             if (payment.note && payment.note.startsWith('ExponentPushToken')) {
                 try {
                     await notifyDevice(payment.note, 'Payment Confirmed', 'You can now deliver the photos.', 'paid', payment.id);
+                    sendDeliveryLinks(payment.note)
+                        .catch(err => console.error('Error sending delivery links:', err));
                 }
                 catch (error) {
                     console.error('Error sending push notification', error);
