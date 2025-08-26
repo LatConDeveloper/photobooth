@@ -27,51 +27,26 @@ checkoutRoutes.post('/square/mobile-auth-code', async (c) => {
 
 checkoutRoutes.post('/create-checkout-session', async (c) => {
   try {
-    let deviceToken: string;
-    let images: Array<{ filename?: string; mimeType?: string; base64?: string }> = [];
-    let mode: 'links' | 'zip' = 'links';
-    let expiresIn = 3600;
+    let deviceToken: string | undefined;
     let line_items: any[] | undefined;
+    let success_url = 'https://example.com/success.html';
+    let cancel_url = 'https://example.com/cancel.html';
+    let currency = 'usd';
 
-    const form = await c.req.parseBody();
-    deviceToken = form.deviceToken as string;
-    mode = 'zip';
-    expiresIn = form.expiresIn ? Number(form.expiresIn) : 3600;
-
-    const rawFiles = (form['images[]'] ?? form.images) as any;
-    const files = Array.isArray(rawFiles) ? rawFiles : rawFiles ? [rawFiles] : [];
-    images = await Promise.all(files.map(async (file: any) => {
-      const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
-      return { filename: file.filename, mimeType: file.type, base64 };
-    }));
-
-    if (!deviceToken || images.length === 0) {
-      return c.json({ error: 'deviceToken and images are required' }, 400);
-    }
-
-    // Save images and delivery preferences (method & destination)
-    await uploadImagesAndRegister(deviceToken, form.method as any, form.destination as string , images);
-
-    // --- Parse line_items from form-data ---
-    // Accept either a single field 'line_items' with a JSON array/object,
-    // or multiple 'line_items[]' entries where each is a JSON object string
-    const rawLineItems = (form['line_items[]'] ?? form.line_items) as any;
-    if (rawLineItems) {
-      if (Array.isArray(rawLineItems)) {
-        try {
-          line_items = rawLineItems.map((s: string) => (typeof s === 'string' ? JSON.parse(s) : s));
-        } catch (e) {
-          return c.json({ error: 'Invalid line_items[] JSON entries', detail: String(e) }, 400);
+    const body = await c.req.json();
+    deviceToken = body.deviceToken || body.expoPushToken;
+    success_url = body.success_url || success_url;
+    cancel_url = body.cancel_url || cancel_url;
+    currency = body.currency || currency;
+    if (body.line_items) {
+      if (Array.isArray(body.line_items)) {
+        line_items = body.line_items;
+      } else if (typeof body.line_items === 'object') {
+        line_items = [body.line_items];
+      } else if (typeof body.line_items === 'string') {
+        try { const parsed = JSON.parse(body.line_items); line_items = Array.isArray(parsed) ? parsed : [parsed]; } catch (e) {
+          return c.json({ error: 'Invalid line_items JSON string', detail: String(e) }, 400);
         }
-      } else if (typeof rawLineItems === 'string') {
-        try {
-          const parsed = JSON.parse(rawLineItems);
-          line_items = Array.isArray(parsed) ? parsed : [parsed];
-        } catch (e) {
-          return c.json({ error: 'Invalid line_items JSON (must be a JSON array or object)', detail: String(e) }, 400);
-        }
-      } else {
-        line_items = rawLineItems as any[];
       }
     }
 
@@ -79,16 +54,13 @@ checkoutRoutes.post('/create-checkout-session', async (c) => {
       return c.json({ error: 'The line_items parameter is required and must be a non-empty array for payment mode.' }, 400);
     }
 
-    console.log("form", form.deviceToken, deviceToken)
     const session = await createCheckoutSession({
       mode: 'payment',
-      success_url: 'https://example.com/success.html',
-      cancel_url: 'https://example.com/cancel.html',
-      currency: 'usd',
+      success_url,
+      cancel_url,
+      currency,
       line_items,
-      metadata: {
-        fcmToken: form.deviceToken
-      }
+      metadata: deviceToken ? { fcmToken: deviceToken } : undefined
     });
 
     return c.json({ url: session.url });
@@ -121,5 +93,47 @@ checkoutRoutes.post('/create-payment-intent', async (c) => {
   } catch (err: any) {
     console.error('create-payment-intent failed:', err);
     return c.json({ error: 'Failed to create payment intent', detail: String(err?.message || err) }, 500);
+  }
+});
+
+checkoutRoutes.post('/images', async (c) => {
+  try {
+    const contentType = c.req.header('content-type') || '';
+    let deviceToken: string;
+    let method: 'email'|'sms'|'print'|undefined;
+    let destination: string|undefined;
+    let expiresAt: string|undefined;
+    let images: Array<{ filename?: string; mimeType?: string; base64?: string }> = [];
+
+    if (contentType.includes('multipart/form-data')) {
+      const form = await c.req.parseBody();
+      deviceToken = form.deviceToken as string;
+      method = form.method as any;
+      destination = form.destination as string;
+      expiresAt = form.expiresAt as string;
+      const rawFiles = (form['images[]'] ?? form.images) as any;
+      const files = Array.isArray(rawFiles) ? rawFiles : rawFiles ? [rawFiles] : [];
+      images = await Promise.all(files.map(async (file: any) => {
+        const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
+        return { filename: file.filename, mimeType: file.type, base64 };
+      }));
+    } else {
+      const body = await c.req.json();
+      deviceToken = body.deviceToken;
+      method = body.method;
+      destination = body.destination;
+      expiresAt = body.expiresAt;
+      images = body.images || [];
+    }
+
+    if (!deviceToken || images.length === 0) {
+      return c.json({ error: 'deviceToken and images are required' }, 400);
+    }
+
+    const { linkId, uploaded, errors } = await uploadImagesAndRegister(deviceToken, method, destination, images);
+    return c.json({ linkId, uploaded, errors });
+  } catch (err: any) {
+    console.error('POST /checkout/images failed:', err);
+    return c.json({ error: 'Upload failed', detail: String(err?.message || err) }, 500);
   }
 });
