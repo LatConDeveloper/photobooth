@@ -62,7 +62,7 @@ checkoutRoutes.post('/create-checkout-session', async (c) => {
       line_items,
       metadata: deviceToken ? { fcmToken: deviceToken } : undefined
     });
-
+    console.log(`Received link: ${session.url}`);
     return c.json({ url: session.url });
   } catch (err: any) {
     console.error('create-checkout-session failed:', err);
